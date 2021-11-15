@@ -1,0 +1,59 @@
+// Copyright 2013 The Gorilla WebSocket Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/caddyserver/certmagic"
+
+	"github.com/csw/semrelay"
+)
+
+var password string
+var token string
+
+func main() {
+	domain := os.Getenv("DOMAIN")
+	if domain == "" {
+		log.Fatal("Must specify DOMAIN")
+	}
+	password = os.Getenv("PASSWORD")
+	if password == "" {
+		log.Fatal("Must specify PASSWORD")
+	}
+	token = os.Getenv("TOKEN")
+	if token == "" {
+		log.Fatal("Must specify TOKEN")
+	}
+	certmagic.DefaultACME.Email = os.Getenv("EMAIL")
+	if os.Getenv("STAGING") != "" {
+		certmagic.DefaultACME.CA = certmagic.LetsEncryptStagingCA
+	}
+	disp := newDispatcher()
+	go disp.run()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/hook", func(w http.ResponseWriter, r *http.Request) {
+		handleHook(disp, w, r)
+	})
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(disp, w, r)
+	})
+	if user := os.Getenv("TEST"); user != "" {
+		go func() {
+			for {
+				time.Sleep(15 * time.Second)
+				disp.send(user, semrelay.ExampleSuccess)
+			}
+		}()
+	}
+	err := certmagic.HTTPS([]string{domain}, mux)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
+}

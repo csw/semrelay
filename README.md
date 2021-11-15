@@ -1,0 +1,59 @@
+Semaphore CI notification relay
+===============================
+
+This is a service to provide Linux desktop notifications for your [Semaphore CI][semaphore] builds. Unlike Semaphore's Slack notification feature, this allows filtering to see notifications for only your own builds. It also provides DBus notifications with the Semaphore icon and a default action of opening the build results in your browser.
+
+![Example success](success_screenshot.png)
+
+![Example failure](failure_screenshot.png)
+
+It's written in Go and consists of a relay server to accept [webhook notifications][sem-webhook] from Semaphore and pass them on via [WebSockets][], as well as a client that connects to the relay, subscribes to webhook messages, and sends [DBus notifications][notifications].
+
+It uses the [Gorilla WebSocket][gorilla-ws] library, and part of the server implementation is shamelessly borrowed from its example code. DBus notifications use @esiqveland's [notify][] library.
+
+## Server
+
+The server provides an HTTPS service to both accept Semaphore webhook notifications to the `/hook` endpoint and accept client WebSocket connections at the `/ws` endpoint. It uses [CertMagic][] to automatically acquire a TLS certificate from [Let's Encrypt][letsencrypt]. Clients and Semaphore authenticate with shared secrets; create a password for clients to use and a token for Semaphore to use. You'll also need to set up a domain name for your server.
+
+This has very low resource requirements; a t3.nano EC2 instance works fine and costs $3/month, and can easily be configured with a domain name via Route 53.
+
+It's configured via environment variables:
+- `DOMAIN`: DNS domain name to acquire a certificate for.
+- `EMAIL`: email address used for Let's Encrypt.
+- `PASSWORD`: Password used by clients.
+- `TOKEN`: Security token configured in Semaphore URL.
+- `TEST`: Set to send sample messages to the specified user every 15 seconds for testing.
+
+Build the server binary with `CGO_ENABLED=0 go build ./cmd/semrelay` and copy it to the server.
+
+To enable it to bind to ports 80 and 443 without running as root, grant it the `cap_net_bind_service` capability with `sudo setcap cap_net_bind_service=+ep semrelay`.
+
+## Semaphore configuration
+
+Using the token you configured the server with, set up notifications for the desired project like so:
+
+``` shell
+sem create notification myproject-relay \
+    --projects myproject \
+    --webhook-endpoint 'https://semrelay.example.com/hook?token=<TOKEN>'
+```
+
+## Client
+
+In the simplest way, run the client with your GitHub username and the password you set on the server:
+
+``` shell
+go run ./cmd/semnotify \
+    --user <username> \
+    --password <password> \
+    --server <hostname>
+```
+
+[semaphore]: https://semaphoreci.com/
+[sem-webhook]: https://docs.semaphoreci.com/essentials/webhook-notifications/
+[websockets]: https://en.wikipedia.org/wiki/WebSocket
+[gorilla-ws]: https://github.com/gorilla/websocket
+[notify]: https://github.com/esiqveland/notify
+[certmagic]: https://github.com/caddyserver/certmagic
+[notifications]: https://wiki.archlinux.org/title/Desktop_notifications
+[letsencrypt]: https://letsencrypt.org/
