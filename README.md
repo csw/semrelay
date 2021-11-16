@@ -55,10 +55,16 @@ sem create notification myproject-relay \
 
 ## Client
 
-In the simplest way, run the client with your GitHub username and the password you set on the server:
+The `semnotify` client can be installed with:
 
 ``` shell
-go run ./cmd/semnotify \
+go install github.com/csw/semrelay/cmd/semnotify@v0.1.0
+```
+
+Run the client with your GitHub username and the password you set on the server:
+
+``` shell
+semnotify \
     --user <username> \
     --password <password> \
     --server <hostname>
