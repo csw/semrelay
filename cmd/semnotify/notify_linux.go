@@ -79,7 +79,10 @@ func runHandler() {
 		case reg := <-registerCh:
 			registry[reg.id] = reg.url
 		case id := <-clickCh:
-			url := registry[id]
+			url, found := registry[id]
+			if !found {
+				continue
+			}
 			delete(registry, id)
 			log.Printf("Opening URL on click: %s\n", url)
 			cmd := exec.Command("/usr/bin/xdg-open", url)

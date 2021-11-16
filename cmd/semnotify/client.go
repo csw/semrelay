@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -121,6 +123,9 @@ func pinger(conn *websocket.Conn) {
 			return
 		}
 		if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			log.Printf("Error sending ping: %v\n", err)
 			return
 		}
