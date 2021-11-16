@@ -1,7 +1,3 @@
-// Copyright 2013 The Gorilla WebSocket Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package main
 
 import (
@@ -12,7 +8,7 @@ import (
 
 	"github.com/caddyserver/certmagic"
 
-	"github.com/csw/semrelay"
+	internal "github.com/csw/semrelay/internal"
 )
 
 var password string
@@ -48,7 +44,7 @@ func main() {
 		go func() {
 			for {
 				time.Sleep(15 * time.Second)
-				disp.send(user, semrelay.ExampleSuccess)
+				disp.send(user, internal.ExampleSuccess)
 			}
 		}()
 	}

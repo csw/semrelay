@@ -1,4 +1,4 @@
-package semrelay
+package internal
 
 var ExampleSuccess = []byte(`{
 	"blocks": [

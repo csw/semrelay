@@ -14,6 +14,7 @@ import (
 	flags "github.com/jessevdk/go-flags"
 
 	"github.com/csw/semrelay"
+	internal "github.com/csw/semrelay/internal"
 )
 
 var opts struct {
@@ -167,14 +168,14 @@ func main() {
 	if len(args) > 0 {
 		switch args[0] {
 		case "success":
-			if err := notifyUser(semrelay.ExampleSuccess); err != nil {
-				log.Fatal("error in notifyUser", err)
+			if err := notifyUser(internal.ExampleSuccess); err != nil {
+				log.Fatal("error in notifyUser: ", err)
 			}
 			time.Sleep(5 * time.Second)
 			os.Exit(0)
 		case "failure":
-			if err := notifyUser(semrelay.ExampleFailure); err != nil {
-				log.Fatal("error in notifyUser", err)
+			if err := notifyUser(internal.ExampleFailure); err != nil {
+				log.Fatal("error in notifyUser: ", err)
 			}
 			time.Sleep(5 * time.Second)
 			os.Exit(0)
