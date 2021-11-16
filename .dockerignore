@@ -1,0 +1,6 @@
+/semnotify
+/semrelay
+*.vscode
+docker-compose.yml
+/docker
+/*.png

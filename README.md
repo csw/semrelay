@@ -24,6 +24,21 @@ It's configured via environment variables:
 - `TOKEN`: Security token configured in Semaphore URL.
 - `TEST`: Set to send sample messages to the specified user every 15 seconds for testing.
 
+### Running via Docker Compose
+
+The easiest way to run the relay service is via Docker Compose, using the provided [docker-compose.yml](docker-compose.yml) and the `cswheeler/semrelay:latest` Docker image built from [Dockerfile.server](docker/Dockerfile.server). Copy `docker-compose.yml` to your server in an appropriate directory (you don't need any other files) and create a `.env` file in the same directory to set the above environment variables:
+
+```
+DOMAIN=semrelay.example.com
+EMAIL=me@example.com
+PASSWORD=somepassword
+TOKEN=sometoken
+```
+
+Now run `docker-compose pull semrelay && docker-compose up -d semrelay`. It should acquire TLS certificates and begin listening on ports 80 and 443. It's configured to be restarted by Docker whenever it exits.
+
+### Running directly
+
 Build the server binary with `CGO_ENABLED=0 go build ./cmd/semrelay` and copy it to the server.
 
 To enable it to bind to ports 80 and 443 without running as root, grant it the `cap_net_bind_service` capability with `sudo setcap cap_net_bind_service=+ep semrelay`.
@@ -35,7 +50,7 @@ Using the token you configured the server with, set up notifications for the des
 ``` shell
 sem create notification myproject-relay \
     --projects myproject \
-    --webhook-endpoint 'https://semrelay.example.com/hook?token=<TOKEN>'
+    --webhook-endpoint 'https://semrelay.example.com/hook?token=<token>'
 ```
 
 ## Client
