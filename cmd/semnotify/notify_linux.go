@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
@@ -26,11 +25,7 @@ var clickCh = make(chan uint32, 8)
 
 var icon *DBusIcon
 
-func notifyUser(payload []byte) error {
-	var semN semrelay.Notification
-	if err := json.Unmarshal(payload, &semN); err != nil {
-		return err
-	}
+func notifyUserPlatform(semN *semrelay.Notification) error {
 	if semN.Pipeline.Id != semN.Workflow.InitialPipelineId {
 		log.Printf("Ignoring result for pipeline %s\n", semN.Pipeline.YamlFileName)
 		return nil
@@ -42,7 +37,7 @@ func notifyUser(payload []byte) error {
 	url := fmt.Sprintf("https://%s.semaphoreci.com/workflows/%s?pipeline_id=%s",
 		semN.Organization.Name, semN.Workflow.Id, semN.Pipeline.Id)
 	tag := fmt.Sprintf("%s/%s", semN.Project.Name, semN.Revision.Branch.Name)
-	titleText, err := title(&semN)
+	titleText, err := title(semN)
 	if err != nil {
 		return err
 	}
@@ -50,7 +45,7 @@ func notifyUser(payload []byte) error {
 		AppName:    "Semaphore",
 		ReplacesID: uint32(0),
 		Summary:    titleText,
-		Body:       body(&semN),
+		Body:       body(semN),
 		Actions: []notify.Action{
 			{Key: "default", Label: "Open"},
 		},

@@ -29,6 +29,14 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 )
 
+func notifyUser(payload []byte) error {
+	var semN semrelay.Notification
+	if err := json.Unmarshal(payload, &semN); err != nil {
+		return err
+	}
+	return notifyUserPlatform(&semN)
+}
+
 func title(semN *semrelay.Notification) (string, error) {
 	startT, err := time.Parse(time.RFC3339, semN.Pipeline.RunningAt)
 	if err != nil {
@@ -105,9 +113,13 @@ func runConnection() error {
 			log.Printf("ReadMessage failed: %v\n", err)
 			return err
 		}
+		if payload == nil {
+			log.Println("Received empty payload.")
+			continue
+		}
 		fmt.Printf("Received: %s\n", payload)
 		if err := notifyUser(payload); err != nil {
-			log.Fatal("notifyUser failed", err)
+			log.Fatal("notifyUser failed: ", err)
 		}
 	}
 }
@@ -155,10 +167,10 @@ func register(conn *websocket.Conn) error {
 func main() {
 	args, err := flags.Parse(&opts)
 	if err != nil {
-		log.Fatal("error parsing args", err)
+		log.Fatal("error parsing args: ", err)
 	}
 	if err := initNotify(); err != nil {
-		log.Fatal("DBus connection error", err)
+		log.Fatal("DBus connection error: ", err)
 	}
 	defer func() {
 		if err := cleanupNotify(); err != nil {
