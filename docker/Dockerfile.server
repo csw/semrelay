@@ -8,11 +8,13 @@ RUN env CGO_ENABLED=0 go build ./cmd/semrelay
 
 FROM alpine:3.14.3
 RUN apk add libcap
+# create an /app volume for the TLS certificates
 RUN mkdir /app
 RUN chown nobody:nogroup /app
 ENV HOME=/app
 VOLUME /app
-COPY --chown=nobody:nogroup --from=builder /app/semrelay /semrelay
+COPY --from=builder /app/semrelay /semrelay
+# allow the executable to bind to privileged ports
 RUN setcap cap_net_bind_service=+ep /semrelay
 USER nobody:nogroup
 CMD ["/semrelay"]

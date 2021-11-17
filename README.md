@@ -37,6 +37,8 @@ TOKEN=sometoken
 
 Now run `docker-compose pull semrelay && docker-compose up -d semrelay`. It should acquire TLS certificates and begin listening on ports 80 and 443. It's configured to be restarted by Docker whenever it exits.
 
+The Docker container stores its certificates in a persistent volume to avoid repeatedly generating certificates, which could run afoul of the Let's Encrypt rate limits.
+
 ### Running directly
 
 Build the server binary with `CGO_ENABLED=0 go build ./cmd/semrelay` and copy it to the server.
