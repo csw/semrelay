@@ -13,7 +13,6 @@ require (
 	go.uber.org/zap v1.17.0 // indirect
 	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
-	golang.org/x/sys v0.0.0-20210423082822-04245dca01da // indirect
 	golang.org/x/text v0.3.6 // indirect
 )
 
@@ -23,4 +22,5 @@ require (
 	github.com/godbus/dbus/v5 v5.0.6
 	github.com/gorilla/websocket v1.4.2
 	github.com/jessevdk/go-flags v1.5.0
+	golang.org/x/sys v0.0.0-20210423082822-04245dca01da
 )
