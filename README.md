@@ -72,17 +72,6 @@ semnotify \
     --server <hostname>
 ```
 
-## Use with mako
-
-When using this with the [mako][] notification daemon, you can configure it so notifications for the same branch will be combined. semnotify sets its application name to `Semaphore` and the category hint to `$repo/$branch`, so add the following to `.config/mako/config`:
-
-
-```
-[app-name=Semaphore]
-group-by=category
-```
-
-
 [semaphore]: https://semaphoreci.com/
 [sem-webhook]: https://docs.semaphoreci.com/essentials/webhook-notifications/
 [websockets]: https://en.wikipedia.org/wiki/WebSocket
@@ -91,4 +80,3 @@ group-by=category
 [certmagic]: https://github.com/caddyserver/certmagic
 [notifications]: https://wiki.archlinux.org/title/Desktop_notifications
 [letsencrypt]: https://letsencrypt.org/
-[mako]: https://github.com/emersion/mako

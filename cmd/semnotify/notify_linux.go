@@ -51,7 +51,6 @@ func notifyUserPlatform(semN *semrelay.Notification) error {
 		},
 		Hints: map[string]dbus.Variant{
 			"urgency":           urgency,
-			"category":          dbus.MakeVariant(tag),
 			"x-dunst-stack-tag": dbus.MakeVariant(tag),
 			"image-data":        dbus.MakeVariant(icon),
 		},

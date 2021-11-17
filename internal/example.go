@@ -126,11 +126,11 @@ var ExampleFailure = []byte(`{
 	},
 	"project": {
 	  "id": "78a69d7b-1ad6-4d1d-8fb8-66f929509574",
-	  "name": "myproject"
+	  "name": "otherproject"
 	},
 	"repository": {
-	  "slug": "example/myproject",
-	  "url": "https://github.com/example/myproject"
+	  "slug": "example/otherproject",
+	  "url": "https://github.com/example/otherproject"
 	},
 	"revision": {
 	  "branch": {
