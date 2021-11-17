@@ -40,6 +40,6 @@ func handleHook(d *dispatcher, w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "nope")
 		return
 	}
-	d.send(user, body)
+	d.dispatch(user, body)
 	fmt.Fprintln(w, "Roger")
 }

@@ -43,8 +43,7 @@ func (d *dispatcher) unregister(user string, client *Client) {
 	d.leaveCh <- session{user: user, client: client}
 }
 
-func (d *dispatcher) send(user string, payload []byte) {
-	log.Printf("Sending %d bytes to %s\n", len(payload), user)
+func (d *dispatcher) dispatch(user string, payload []byte) {
 	d.dispatchCh <- dispatch{user: user, payload: payload}
 }
 
@@ -65,6 +64,28 @@ func (d *dispatcher) onUnregister(sess session) {
 	close(sess.client.send)
 }
 
+func (d *dispatcher) onDispatch(msg dispatch) {
+	var prepared *websocket.PreparedMessage
+	var err error
+	for _, client := range d.clients[msg.user] {
+		if prepared == nil {
+			prepared, err = websocket.NewPreparedMessage(websocket.TextMessage, msg.payload)
+			if err != nil {
+				log.Printf("Unable to prepare message: %s\n", msg.payload)
+				panic(err)
+			}
+		}
+		log.Printf("Sending %d bytes to %s @ %s\n", len(msg.payload), msg.user, client.conn.RemoteAddr())
+		select {
+		case client.send <- prepared:
+			// sent
+		default:
+			// queue is full, drop the connection
+			d.onUnregister(session{user: msg.user, client: client})
+		}
+	}
+}
+
 func (d *dispatcher) run() {
 	for {
 		select {
@@ -72,26 +93,8 @@ func (d *dispatcher) run() {
 			d.onRegister(sess)
 		case sess := <-d.leaveCh:
 			d.onUnregister(sess)
-		case dispatch := <-d.dispatchCh:
-			var prepared *websocket.PreparedMessage
-			var err error
-			for _, client := range d.clients[dispatch.user] {
-				if prepared == nil {
-					prepared, err = websocket.NewPreparedMessage(websocket.TextMessage, dispatch.payload)
-					if err != nil {
-						log.Printf("Unable to prepare message: %s\n", dispatch.payload)
-						panic(err)
-					}
-				}
-				log.Printf("Sending %d bytes to %s @ %s\n", len(dispatch.payload), dispatch.user, client.conn.RemoteAddr())
-				select {
-				case client.send <- prepared:
-					// sent
-				default:
-					// queue is full, drop the connection
-					d.onUnregister(session{user: dispatch.user, client: client})
-				}
-			}
+		case msg := <-d.dispatchCh:
+			d.onDispatch(msg)
 		}
 	}
 }

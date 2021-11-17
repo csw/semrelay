@@ -44,7 +44,7 @@ func main() {
 		go func() {
 			for {
 				time.Sleep(15 * time.Second)
-				disp.send(user, internal.ExampleSuccess)
+				disp.dispatch(user, internal.ExampleSuccess)
 			}
 		}()
 	}
