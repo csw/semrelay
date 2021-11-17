@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"strings"
 
 	"github.com/csw/semrelay"
 	"github.com/esiqveland/notify"
@@ -109,6 +110,17 @@ func initNotify() error {
 	if err != nil {
 		return err
 	}
+	server, err := notifier.GetServerInformation()
+	if err != nil {
+		return err
+	}
+	log.Printf("Notification daemon: %s (%s), version %s, specification version %s\n",
+		server.Name, server.Vendor, server.Version, server.SpecVersion)
+	caps, err := notifier.GetCapabilities()
+	if err != nil {
+		return err
+	}
+	log.Printf("Notification daemon capabilities: %s\n", strings.Join(caps, ", "))
 
 	icon = buildIcon(semrelay.IconImage)
 
