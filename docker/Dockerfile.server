@@ -10,9 +10,9 @@ FROM alpine:3.14.3
 RUN apk add libcap
 RUN mkdir /app
 RUN chown nobody:nogroup /app
-RUN chmod 755 /app
 ENV HOME=/app
-COPY --chown=nobody:nogroup --from=builder /app/semrelay /app/semrelay
-RUN setcap cap_net_bind_service=+ep /app/semrelay
+VOLUME /app
+COPY --chown=nobody:nogroup --from=builder /app/semrelay /semrelay
+RUN setcap cap_net_bind_service=+ep /semrelay
 USER nobody:nogroup
-CMD ["/app/semrelay"]
+CMD ["/semrelay"]
