@@ -19,6 +19,8 @@ type registration struct {
 	url string
 }
 
+// registry associates DBus notification IDs with the corresponding URLs for the
+// Semaphore pipeline pages, to display when the user clicks on a notification.
 var registry = make(map[uint32]string)
 
 var registerCh = make(chan registration, 8)
@@ -28,15 +30,22 @@ var icon *DBusIcon
 
 func notifyUserPlatform(semN *semrelay.Notification) error {
 	if semN.Pipeline.Id != semN.Workflow.InitialPipelineId {
+		// Only display results for the original pipeline. This avoids
+		// displaying notifications for automatic promotions that might validly
+		// fail. This should probably be changed, but I'll have to revisit one
+		// of my CI configurations.
 		log.Printf("Ignoring result for pipeline %s\n", semN.Pipeline.YamlFileName)
 		return nil
 	}
-	urgency := dbus.MakeVariant(1)
+	urgency := dbus.MakeVariant(1) // Normal
 	if semN.Pipeline.Result == "failed" {
-		urgency = dbus.MakeVariant(byte(2))
+		urgency = dbus.MakeVariant(byte(2)) // Critical
 	}
 	url := fmt.Sprintf("https://%s.semaphoreci.com/workflows/%s?pipeline_id=%s",
 		semN.Organization.Name, semN.Workflow.Id, semN.Pipeline.Id)
+	// The stacking tag is for x-dunst-stack-tag, so that newer notifications
+	// for a given branch will be displayed instead of older ones, rather than
+	// alongside them.
 	tag := fmt.Sprintf("%s/%s", semN.Project.Name, semN.Revision.Branch.Name)
 	titleText, err := title(semN)
 	if err != nil {
@@ -60,6 +69,7 @@ func notifyUserPlatform(semN *semrelay.Notification) error {
 	if err != nil {
 		return err
 	}
+	// Register the URL to be displayed when the action is invoked.
 	registerCh <- registration{id: id, url: url}
 	return nil
 }
@@ -80,7 +90,7 @@ func runHandler() {
 			}
 			delete(registry, id)
 			log.Printf("Opening URL on click: %s\n", url)
-			cmd := exec.Command("/usr/bin/xdg-open", url)
+			cmd := exec.Command("xdg-open", url)
 			err := cmd.Run()
 			if err != nil {
 				log.Printf("Opening URL %s failed: %v\n", url, err)
@@ -108,16 +118,19 @@ func initNotify() error {
 
 	notifier, err = notify.New(dConn, notify.WithOnAction(onAction))
 	if err != nil {
+		dConn.Close()
 		return err
 	}
 	server, err := notifier.GetServerInformation()
 	if err != nil {
+		dConn.Close()
 		return err
 	}
 	log.Printf("Notification daemon: %s (%s), version %s, specification version %s\n",
 		server.Name, server.Vendor, server.Version, server.SpecVersion)
 	caps, err := notifier.GetCapabilities()
 	if err != nil {
+		dConn.Close()
 		return err
 	}
 	log.Printf("Notification daemon capabilities: %s\n", strings.Join(caps, ", "))
