@@ -3,4 +3,4 @@
 *.vscode
 docker-compose.yml
 /docker
-/*.png
+*_screenshot.png

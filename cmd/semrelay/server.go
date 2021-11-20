@@ -9,6 +9,7 @@ import (
 	"github.com/caddyserver/certmagic"
 
 	internal "github.com/csw/semrelay/internal"
+	"github.com/csw/semrelay/relay"
 )
 
 var password string
@@ -31,8 +32,8 @@ func main() {
 	if os.Getenv("STAGING") != "" {
 		certmagic.DefaultACME.CA = certmagic.LetsEncryptStagingCA
 	}
-	disp := newDispatcher()
-	go disp.run()
+	disp := relay.NewDispatcher()
+	go disp.Run()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hook", func(w http.ResponseWriter, r *http.Request) {
 		handleHook(disp, w, r)
@@ -44,7 +45,7 @@ func main() {
 		go func() {
 			for {
 				time.Sleep(15 * time.Second)
-				disp.dispatch(user, internal.ExampleSuccess)
+				disp.Dispatch(user, internal.ExampleSuccess)
 			}
 		}()
 	}

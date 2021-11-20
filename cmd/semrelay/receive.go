@@ -8,9 +8,10 @@ import (
 	"net/http"
 
 	"github.com/csw/semrelay"
+	"github.com/csw/semrelay/relay"
 )
 
-func handleHook(d *dispatcher, w http.ResponseWriter, r *http.Request) {
+func handleHook(d *relay.Dispatcher, w http.ResponseWriter, r *http.Request) {
 	curToken := r.URL.Query().Get("token")
 	if curToken != token {
 		log.Printf("Wrong token %s for webhook message\n", curToken)
@@ -40,6 +41,6 @@ func handleHook(d *dispatcher, w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "nope")
 		return
 	}
-	d.dispatch(user, body)
+	d.Dispatch(user, body)
 	fmt.Fprintln(w, "Roger")
 }

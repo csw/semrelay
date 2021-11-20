@@ -8,6 +8,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/csw/semrelay"
+	"github.com/csw/semrelay/relay"
 )
 
 const (
@@ -37,13 +39,34 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	dispatcher *dispatcher
+	dispatcher *relay.Dispatcher
+	user       *relay.User
 
 	// The websocket connection.
 	conn *websocket.Conn
 
 	// Buffered channel of outbound messages.
-	send chan *websocket.PreparedMessage
+	send chan []byte
+}
+
+func (c *Client) String() string {
+	return c.conn.RemoteAddr().String()
+}
+
+func (c *Client) TrySend(msg *relay.NotificationTask) bool {
+	select {
+	case c.send <- msg.Payload:
+		// sent
+		return true
+	default:
+		// queue is full, drop the connection
+		return false
+	}
+}
+
+func (c *Client) Disconnect() {
+	log.Printf("Disconnecting client: %s\n", c)
+	close(c.send)
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -62,33 +85,50 @@ func (c *Client) readPump() {
 	c.conn.SetPongHandler(func(string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
-	user, err := c.awaitRegister()
+	username, err := c.awaitRegister()
 	if err != nil {
 		log.Printf("error: %v", err)
 		return
 	}
-	c.dispatcher.register(user, c)
+	c.user = c.dispatcher.Register(username, c)
 	defer func() {
-		c.dispatcher.unregister(user, c)
+		c.user.Leave(c)
 	}()
 	for {
-		_, _, err := c.conn.ReadMessage()
+		_, raw, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("error: %v", err)
-			}
+			log.Printf("read error from %s: %v\n", c.String(), err)
+			// if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			// 	log.Printf("error: %v", err)
+			// }
 			break
+		}
+		var msg semrelay.Message
+		err = json.Unmarshal(raw, &msg)
+		if err != nil {
+			log.Printf("Malformed message from client (%v): %s\n", err, raw)
+			break
+		}
+		switch msg.Type {
+		case semrelay.AckMsg:
+			c.user.Ack(msg.Id)
+		default:
+			log.Printf("Unexpected %s message from client\n", msg.Type)
 		}
 	}
 }
 
 func (c *Client) awaitRegister() (string, error) {
-	_, message, err := c.conn.ReadMessage()
+	var msg semrelay.Message
+	err := c.conn.ReadJSON(&msg)
 	if err != nil {
 		return "", err
 	}
+	if msg.Type != semrelay.RegistrationMsg {
+		return "", fmt.Errorf("Expected registration message, got %s", msg.Type)
+	}
 	var reg semrelay.Registration
-	if err := json.Unmarshal(message, &reg); err != nil {
+	if err := json.Unmarshal(msg.Payload, &reg); err != nil {
 		return "", err
 	}
 	if reg.User == "" {
@@ -123,18 +163,11 @@ func (c *Client) writePump() {
 				return
 			}
 
-			if err := c.conn.WritePreparedMessage(message); err != nil {
+			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				log.Printf("Error sending message to %s: %v\n",
 					c.conn.RemoteAddr(), err)
 			}
-			w, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return
-			}
 
-			if err := w.Close(); err != nil {
-				return
-			}
 		case <-ticker.C:
 			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
 				panic(err)
@@ -147,13 +180,13 @@ func (c *Client) writePump() {
 }
 
 // serveWs handles websocket requests from the peer.
-func serveWs(disp *dispatcher, w http.ResponseWriter, r *http.Request) {
+func serveWs(disp *relay.Dispatcher, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	client := &Client{dispatcher: disp, conn: conn, send: make(chan *websocket.PreparedMessage, 8)}
+	client := &Client{dispatcher: disp, conn: conn, send: make(chan []byte, 32)}
 
 	go client.writePump()
 	go client.readPump()

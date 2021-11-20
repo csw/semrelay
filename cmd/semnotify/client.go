@@ -36,7 +36,7 @@ const (
 )
 
 var (
-	curConn   atomic.Value
+	curClient atomic.Value
 	clientCtx context.Context
 )
 
@@ -119,6 +119,61 @@ func sleep(d time.Duration) {
 	}
 }
 
+type Client struct {
+	conn   *websocket.Conn
+	sendCh chan *semrelay.Message
+}
+
+func newClient(conn *websocket.Conn) *Client {
+	client := &Client{
+		conn:   conn,
+		sendCh: make(chan *semrelay.Message),
+	}
+	go client.runSend()
+	return client
+}
+
+func (c *Client) close() error {
+	close(c.sendCh)
+	return c.conn.Close()
+}
+
+func (c *Client) runSend() {
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		c.conn.Close()
+		ticker.Stop()
+	}()
+	for {
+		select {
+		case msg, ok := <-c.sendCh:
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				panic(err)
+			}
+			if !ok {
+				// The hub closed the channel.
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.conn.WriteJSON(msg); err != nil {
+				log.Println("Failed to send message: ", err)
+				return
+			}
+		case <-ticker.C:
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				panic(err)
+			}
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
+				log.Printf("Error sending ping: %v\n", err)
+				return
+			}
+		}
+	}
+}
+
 func runConnection() error {
 	var err error
 	conn, _, err := websocket.DefaultDialer.DialContext(clientCtx, fmt.Sprintf("wss://%s/ws", opts.Server), nil)
@@ -126,22 +181,17 @@ func runConnection() error {
 		log.Println("connect failed: ", err)
 		return nil
 	}
-	defer conn.Close()
-	curConn.Store(conn)
+	client := newClient(conn)
+	defer client.close()
+	curClient.Store(client)
 	if err := clientCtx.Err(); err != nil {
 		return err
 	}
 	fmt.Println("Connected.")
-	if err := conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+	if err := client.initPings(); err != nil {
 		return err
 	}
-	conn.SetPongHandler(func(string) error {
-		if err := conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-			return err
-		}
-		return nil
-	})
-	go pinger(conn)
+	go client.runSend()
 
 	if err := register(conn); err != nil {
 		log.Println("registration failed: ", err)
@@ -150,41 +200,51 @@ func runConnection() error {
 	log.Println("Registered.")
 
 	for {
-		_, payload, err := conn.ReadMessage()
+		_, raw, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("ReadMessage failed: ", err)
 			return nil
 		}
-		if len(payload) == 0 {
-			log.Println("Received empty payload.")
-			continue
-		}
-		log.Printf("Received %d bytes: %s\n", len(payload), payload)
-		if err := notifyUser(payload); err != nil {
+		if err := handleMessage(client, raw); err != nil {
+			log.Println("error handling message: ", err)
 			return nil
 		}
 	}
 }
 
-func pinger(conn *websocket.Conn) {
-	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		conn.Close()
-	}()
-	for range ticker.C {
-		if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-			log.Printf("Error setting write deadline: %v\n", err)
-			return
-		}
-		if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-			if errors.Is(err, net.ErrClosed) {
-				return
-			}
-			log.Printf("Error sending ping: %v\n", err)
-			return
-		}
+func (c *Client) initPings() error {
+	if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		return err
 	}
+	c.conn.SetPongHandler(func(string) error {
+		if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
+func handleMessage(client *Client, raw []byte) error {
+	if len(raw) == 0 {
+		return errors.New("received empty message")
+	}
+	log.Printf("Received %d bytes: %s\n", len(raw), raw)
+	var msg semrelay.Message
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return fmt.Errorf("parsing message failed: %w", err)
+	}
+	switch msg.Type {
+	case semrelay.NotificationMsg:
+		if err := notifyUser(msg.Payload); err != nil {
+			return err
+		}
+		ack := semrelay.MakeAck(msg.Id)
+		client.sendCh <- &ack
+	default:
+		return fmt.Errorf("Unhandled message type: %s", msg.Type)
+	}
+	return nil
 }
 
 func register(conn *websocket.Conn) error {
@@ -235,11 +295,11 @@ func sendExample(name string) error {
 // received, to interrupt a blocking read.
 func closer() {
 	<-clientCtx.Done()
-	conn := curConn.Load()
-	if conn == nil {
+	client := curClient.Load()
+	if client == nil {
 		return
 	}
-	_ = conn.(*websocket.Conn).Close()
+	_ = client.(*Client).close()
 }
 
 func main() {
