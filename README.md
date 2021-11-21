@@ -71,7 +71,7 @@ It reads its configuration from `$XDG_CONFIG_HOME/semnotify/config` (typically `
 - `insecure`: skip TLS certificate verification (for testing only)
 - `promotions`: whether to show notifications for promotions or only build pipelines.
 
-To use it with [sway][] or [i3][], you can add `exec semnotify` to your configuration.
+To use it with [sway][] or [i3][], you can add `exec_always semnotify` to your configuration.
 
 [semaphore]: https://semaphoreci.com/
 [sem-webhook]: https://docs.semaphoreci.com/essentials/webhook-notifications/

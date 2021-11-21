@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -10,6 +11,8 @@ import (
 	dbus "github.com/godbus/dbus/v5"
 	log "github.com/sirupsen/logrus"
 )
+
+const dbusName = "semrelay.Semnotify"
 
 var dConn *dbus.Conn
 var notifier notify.Notifier
@@ -28,7 +31,7 @@ var clickCh = make(chan uint32, 8)
 
 var icon *DBusIcon
 
-func notifyUserPlatform(semN *semrelay.Notification) error {
+func notifyUserDBus(semN *semrelay.Notification) error {
 	if !promotions && semN.Pipeline.Id != semN.Workflow.InitialPipelineId {
 		// Only display results for the original pipeline. This avoids
 		// displaying notifications for automatic promotions that might validly
@@ -98,7 +101,7 @@ func runHandler() {
 	}
 }
 
-func initNotify() error {
+func initDBus() error {
 	var err error
 	dConn, err = dbus.SessionBusPrivate()
 	if err != nil {
@@ -113,6 +116,16 @@ func initNotify() error {
 	if err = dConn.Hello(); err != nil {
 		dConn.Close()
 		return err
+	}
+
+	reply, err := dConn.RequestName(dbusName, dbus.NameFlagDoNotQueue)
+	if err != nil {
+		return err
+	}
+	if reply == dbus.RequestNameReplyExists {
+		return errors.New("semnotify already running and registered with DBus")
+	} else if reply != dbus.RequestNameReplyPrimaryOwner {
+		return fmt.Errorf("Failed to acquire DBus name: RequestNameReply %d", reply)
 	}
 
 	notifier, err = notify.New(dConn, notify.WithOnAction(onAction))
@@ -141,7 +154,7 @@ func initNotify() error {
 	return nil
 }
 
-func cleanupNotify() error {
+func cleanupDBus() error {
 	if err := notifier.Close(); err != nil {
 		log.WithError(err).Error("Error closing notifier")
 	}

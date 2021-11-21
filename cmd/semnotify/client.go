@@ -48,15 +48,15 @@ func notifyUser(payload []byte) error {
 	if err := json.Unmarshal(payload, &semN); err != nil {
 		return err
 	}
-	return notifyUserPlatform(&semN)
+	return notifyUserDBus(&semN)
 }
 
 func run() error {
-	if err := initNotify(); err != nil {
+	if err := initDBus(); err != nil {
 		return err
 	}
 	defer func() {
-		if err := cleanupNotify(); err != nil {
+		if err := cleanupDBus(); err != nil {
 			log.WithError(err).Error("Cleanup failed")
 		}
 	}()
@@ -232,14 +232,14 @@ func sendExample(name string) error {
 	default:
 		return fmt.Errorf("unhandled argument %s", name)
 	}
-	if err := initNotify(); err != nil {
+	if err := initDBus(); err != nil {
 		return fmt.Errorf("DBus connection error: %s", err)
 	}
 	err := notifyUser(msg)
 	if err == nil {
 		time.Sleep(5 * time.Second)
 	}
-	if cerr := cleanupNotify(); cerr != nil {
+	if cerr := cleanupDBus(); cerr != nil {
 		return cerr
 	}
 	return err
