@@ -2,8 +2,9 @@ package relay
 
 import (
 	"encoding/json"
-	"log"
 	"math/rand"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/csw/semrelay"
 )
@@ -126,7 +127,7 @@ func (u *User) register(client Client) {
 		u.queue = u.queue[:0]
 	}
 	u.clients = append(u.clients, client)
-	log.Printf("Registered %s for %s\n", client, u.name)
+	log.WithField("client", client).WithField("user", u.name).Info("Registered")
 }
 
 func (u *User) deregister(client Client) {
@@ -138,7 +139,7 @@ func (u *User) deregister(client Client) {
 	}
 	u.clients = nClients
 	client.Disconnect()
-	log.Printf("Deregistered %s for %s\n", client, u.name)
+	log.WithField("client", client).WithField("user", u.name).Info("Deregistered")
 }
 
 func appendBounded(q []*NotificationTask, nt *NotificationTask) []*NotificationTask {

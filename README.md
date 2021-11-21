@@ -22,6 +22,7 @@ It's configured via environment variables:
 - `EMAIL`: email address used for Let's Encrypt.
 - `PASSWORD`: Password used by clients.
 - `TOKEN`: Security token configured in Semaphore URL.
+- `VERBOSE`: Enable verbose logging.
 - `TEST`: Set to send sample messages to the specified user every 15 seconds for testing.
 
 ### Running via Docker Compose
@@ -63,14 +64,14 @@ The `semnotify` client can be installed with:
 go install github.com/csw/semrelay/cmd/semnotify@latest
 ```
 
-Run the client with your GitHub username and the password you set on the server:
+It reads its configuration from `$XDG_CONFIG_HOME/semnotify/config` (typically `$HOME/.config/semnotify/config`) and from the command line as well. Settings:
+- `user`: GitHub username to receive notifications for.
+- `password`: server password.
+- `server`: server hostname.
+- `insecure`: skip TLS certificate verification (for testing only)
+- `promotions`: whether to show notifications for promotions or only build pipelines.
 
-``` shell
-semnotify \
-    --user <username> \
-    --password <password> \
-    --server <hostname>
-```
+To use it with [sway][] or [i3][], you can add `exec semnotify` to your configuration.
 
 [semaphore]: https://semaphoreci.com/
 [sem-webhook]: https://docs.semaphoreci.com/essentials/webhook-notifications/
@@ -80,3 +81,5 @@ semnotify \
 [certmagic]: https://github.com/caddyserver/certmagic
 [notifications]: https://wiki.archlinux.org/title/Desktop_notifications
 [letsencrypt]: https://letsencrypt.org/
+[sway]: https://swaywm.org/
+[i3]: https://i3wm.org/

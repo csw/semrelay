@@ -1,7 +1,7 @@
 package relay
 
 import (
-	"log"
+	log "github.com/sirupsen/logrus"
 )
 
 type session struct {
@@ -31,7 +31,7 @@ func NewDispatcher() *Dispatcher {
 }
 
 func (d *Dispatcher) Register(user string, client Client) *User {
-	log.Printf("Registering %s @ %s\n", user, client.String())
+	log.WithFields(log.Fields{"user": user, "client": client}).Debug("Registering")
 	userCh := make(chan *User, 1)
 	d.joinCh <- session{user: user, client: client, userCh: userCh}
 	return <-userCh

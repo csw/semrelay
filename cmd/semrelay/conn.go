@@ -9,11 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/csw/semrelay"
 	"github.com/csw/semrelay/relay"
@@ -65,19 +65,14 @@ func (c *Client) TrySend(msg *relay.NotificationTask) bool {
 }
 
 func (c *Client) Disconnect() {
-	log.Printf("Disconnecting client: %s\n", c)
+	log.WithField("conn", c.String()).Info("Disconnecting client")
 	close(c.send)
 }
 
-// readPump pumps messages from the websocket connection to the hub.
-//
-// The application runs readPump in a per-connection goroutine. The application
-// ensures that there is at most one reader on a connection by executing all
-// reads from this goroutine.
+// readPump reads registration and acknowledgemnt messages from the notification
+// client.
 func (c *Client) readPump() {
-	defer func() {
-		c.conn.Close()
-	}()
+	defer c.conn.Close()
 	c.conn.SetReadLimit(maxMessageSize)
 	if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 		panic(err)
@@ -86,8 +81,9 @@ func (c *Client) readPump() {
 		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
 	username, err := c.awaitRegister()
+	ulog := log.WithField("user", username).WithField("conn", c.String())
 	if err != nil {
-		log.Printf("error: %v", err)
+		ulog.WithError(err).Error("Registration failed")
 		return
 	}
 	c.user = c.dispatcher.Register(username, c)
@@ -95,25 +91,19 @@ func (c *Client) readPump() {
 		c.user.Leave(c)
 	}()
 	for {
-		_, raw, err := c.conn.ReadMessage()
-		if err != nil {
-			log.Printf("read error from %s: %v\n", c.String(), err)
-			// if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-			// 	log.Printf("error: %v", err)
-			// }
-			break
-		}
 		var msg semrelay.Message
-		err = json.Unmarshal(raw, &msg)
-		if err != nil {
-			log.Printf("Malformed message from client (%v): %s\n", err, raw)
-			break
+		if err := c.conn.ReadJSON(&msg); err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				ulog.Info("Connection closed")
+				break
+			}
+			log.WithError(err).Error("Error reading message")
 		}
 		switch msg.Type {
 		case semrelay.AckMsg:
 			c.user.Ack(msg.Id)
 		default:
-			log.Printf("Unexpected %s message from client\n", msg.Type)
+			ulog.WithField("type", msg.Type).Error("Unexpected message from client")
 		}
 	}
 }
@@ -164,8 +154,7 @@ func (c *Client) writePump() {
 			}
 
 			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				log.Printf("Error sending message to %s: %v\n",
-					c.conn.RemoteAddr(), err)
+				log.WithError(err).WithField("conn", c.String()).Error("Error sending message")
 			}
 
 		case <-ticker.C:

@@ -37,6 +37,7 @@ require (
 	github.com/esiqveland/notify v0.11.0
 	github.com/godbus/dbus/v5 v5.0.6
 	github.com/gorilla/websocket v1.4.2
+	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/viper v1.9.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359

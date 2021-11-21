@@ -1,12 +1,12 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/caddyserver/certmagic"
+	log "github.com/sirupsen/logrus"
 
 	internal "github.com/csw/semrelay/internal"
 	"github.com/csw/semrelay/relay"
@@ -31,6 +31,9 @@ func main() {
 	certmagic.DefaultACME.Email = os.Getenv("EMAIL")
 	if os.Getenv("STAGING") != "" {
 		certmagic.DefaultACME.CA = certmagic.LetsEncryptStagingCA
+	}
+	if os.Getenv("VERBOSE") != "" {
+		log.SetLevel(log.DebugLevel)
 	}
 	disp := relay.NewDispatcher()
 	go disp.Run()

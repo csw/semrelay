@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"golang.org/x/sys/unix"
@@ -56,7 +56,7 @@ func run() error {
 	}
 	defer func() {
 		if err := cleanupNotify(); err != nil {
-			log.Println("Cleanup failed: ", err)
+			log.WithError(err).Error("Cleanup failed")
 		}
 	}()
 	for {
@@ -76,7 +76,7 @@ func runConnection() error {
 	url := fmt.Sprintf("wss://%s/ws", server)
 	conn, _, err := websocket.DefaultDialer.DialContext(clientCtx, url, nil)
 	if err != nil {
-		log.Println("connect failed: ", err)
+		log.WithError(err).Debug("Connection failed")
 		return nil
 	}
 	client := newClient(clientCtx, conn)
@@ -86,21 +86,25 @@ func runConnection() error {
 		return err
 	}
 	if err := client.initPings(); err != nil {
-		fmt.Println("Failed to set up ping handling:", err)
+		log.WithError(err).Error("Failed to set up ping handling")
 	}
-	fmt.Println("Connected.")
+	log.Infof("Connected to %s.", server)
 
 	register(client)
-	log.Println("Registered.")
+	log.Debug("Registered.")
 
 	for {
 		_, raw, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("ReadMessage failed:", err)
+			if websocket.IsUnexpectedCloseError(err) {
+				log.Warn("Connection closed.")
+				return nil
+			}
+			log.WithError(err).Error("ReadMessage failed")
 			return nil
 		}
 		if err := handleMessage(client, raw); err != nil {
-			log.Println("Error handling message:", err)
+			log.WithError(err).Error("Error handling message")
 			return nil
 		}
 	}
@@ -130,14 +134,12 @@ func newClient(parentCtx context.Context, conn *websocket.Conn) *Client {
 		conn:   conn,
 		sendCh: make(chan *semrelay.Message),
 	}
-	// client.ctx, client.cancel = context.WithCancel(parentCtx)
 	client.sendWG.Add(1)
 	go client.runSend()
 	return client
 }
 
 func (c *Client) close() error {
-	log.Println("client close()")
 	if c.sendCh != nil {
 		close(c.sendCh)
 		c.sendCh = nil
@@ -164,7 +166,7 @@ func (c *Client) runSend() {
 				return
 			}
 			if err := c.conn.WriteJSON(msg); err != nil {
-				log.Println("Failed to send message:", err)
+				log.WithError(err).Error("Error sending message")
 				return
 			}
 		case <-ticker.C:
@@ -175,7 +177,7 @@ func (c *Client) runSend() {
 				if errors.Is(err, net.ErrClosed) {
 					return
 				}
-				log.Printf("Error sending ping: %v\n", err)
+				log.WithError(err).Error("Error sending ping")
 				return
 			}
 		}
@@ -196,7 +198,7 @@ func (c *Client) initPings() error {
 }
 
 func handleMessage(client *Client, raw []byte) error {
-	log.Printf("Received %d bytes: %s\n", len(raw), raw)
+	log.Debugf("Received %d bytes: %s", len(raw), raw)
 	var msg semrelay.Message
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		return fmt.Errorf("parsing message failed: %w", err)
@@ -207,7 +209,7 @@ func handleMessage(client *Client, raw []byte) error {
 			return err
 		}
 		ack := semrelay.MakeAck(msg.Id)
-		log.Printf("Sending ack for message %d\n", msg.Id)
+		log.Debugf("Sending ack for message %d", msg.Id)
 		client.sendCh <- &ack
 	default:
 		return fmt.Errorf("Unhandled message type: %s", msg.Type)
@@ -265,7 +267,6 @@ func parseConfig() error {
 }
 
 func processConfig() error {
-	log.Println("config", viper.AllSettings())
 	user = viper.GetString("user")
 	password = viper.GetString("password")
 	server = viper.GetString("server")
@@ -280,25 +281,35 @@ func processConfig() error {
 	if server == "" {
 		return errors.New("must specify server in configuration")
 	}
+
+	if viper.GetBool("verbose") {
+		log.SetLevel(log.DebugLevel)
+	}
+
 	return nil
 }
 
 func main() {
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp:          true,
+		TimestampFormat:        time.Stamp,
+		DisableLevelTruncation: true,
+	})
+
 	pflag.StringP("user", "u", "", "GitHub user to receive notifications for")
 	pflag.StringP("password", "p", "", "semrelay password")
 	pflag.StringP("server", "s", "", "semrelay hostname")
+	pflag.BoolP("verbose", "v", false, "Verbose mode")
 	pflag.Bool("insecure", false, "Disable TLS certificate verification")
 	pflag.Parse()
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
 		panic(err)
 	}
 	if err := parseConfig(); err != nil {
-		log.Println("Error parsing configuration:", err)
-		os.Exit(1)
+		log.WithError(err).Fatal("Error parsing configuration")
 	}
 	if err := processConfig(); err != nil {
-		log.Println("Configuration error:", err)
-		os.Exit(1)
+		log.WithError(err).Fatal("Configuration error")
 	}
 
 	clientCtx, _ = signal.NotifyContext(context.Background(),
@@ -307,7 +318,7 @@ func main() {
 	args := pflag.Args()
 	if len(args) > 0 {
 		if err := sendExample(args[0]); err != nil {
-			log.Fatal("Sending example failed: ", err)
+			log.WithError(err).Fatal("Sending example failed")
 		}
 		os.Exit(0)
 	}
@@ -316,6 +327,8 @@ func main() {
 		websocket.DefaultDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	if err := run(); err != nil {
-		log.Fatal("Error: ", err)
+		if err != context.Canceled {
+			log.WithError(err).Fatal("Exiting with error")
+		}
 	}
 }

@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os/exec"
 	"strings"
 
 	"github.com/csw/semrelay"
 	"github.com/esiqveland/notify"
 	dbus "github.com/godbus/dbus/v5"
+	log "github.com/sirupsen/logrus"
 )
 
 var dConn *dbus.Conn
@@ -34,7 +34,7 @@ func notifyUserPlatform(semN *semrelay.Notification) error {
 		// displaying notifications for automatic promotions that might validly
 		// fail. This should probably be changed, but I'll have to revisit one
 		// of my CI configurations.
-		log.Printf("Ignoring result for pipeline %s\n", semN.Pipeline.YamlFileName)
+		log.Printf("Ignoring result for pipeline %s", semN.Pipeline.YamlFileName)
 		return nil
 	}
 	urgency := dbus.MakeVariant(1) // Normal
@@ -89,11 +89,11 @@ func runHandler() {
 				continue
 			}
 			delete(registry, id)
-			log.Printf("Opening URL on click: %s\n", url)
+			log.WithField("url", url).Debug("Opening URL on click")
 			cmd := exec.Command("xdg-open", url)
 			err := cmd.Run()
 			if err != nil {
-				log.Printf("Opening URL %s failed: %v\n", url, err)
+				log.WithField("url", url).WithError(err).Error("Error opening URL")
 			}
 		}
 	}
@@ -126,14 +126,14 @@ func initNotify() error {
 		dConn.Close()
 		return err
 	}
-	log.Printf("Notification daemon: %s (%s), version %s, specification version %s\n",
+	log.Debugf("Notification daemon: %s (%s), version %s, specification version %s\n",
 		server.Name, server.Vendor, server.Version, server.SpecVersion)
 	caps, err := notifier.GetCapabilities()
 	if err != nil {
 		dConn.Close()
 		return err
 	}
-	log.Printf("Notification daemon capabilities: %s\n", strings.Join(caps, ", "))
+	log.Debugf("Notification daemon capabilities: %s\n", strings.Join(caps, ", "))
 
 	icon = buildIcon(semrelay.IconImage)
 
@@ -144,10 +144,10 @@ func initNotify() error {
 
 func cleanupNotify() error {
 	if err := notifier.Close(); err != nil {
-		log.Printf("Failed to close notifier: %v\n", err)
+		log.WithError(err).Error("Error closing notifier")
 	}
 	if err := dConn.Close(); err != nil {
-		log.Printf("Failed to close DBus connection: %v\n", err)
+		log.WithError(err).Error("Error closing DBus connection")
 		return err
 	}
 	return nil
