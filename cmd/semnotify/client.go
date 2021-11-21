@@ -10,24 +10,26 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/adrg/xdg"
 	"github.com/gorilla/websocket"
-	flags "github.com/jessevdk/go-flags"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"golang.org/x/sys/unix"
 
 	"github.com/csw/semrelay"
 	internal "github.com/csw/semrelay/internal"
 )
 
-var opts struct {
-	User     string `short:"u" long:"user" description:"GitHub username to show notifications for"`
-	Password string `short:"p" long:"password" description:"Relay server password"`
-	Server   string `short:"s" long:"server" description:"Relay server hostname"`
-	Insecure bool   `long:"insecure" description:"Disable TLS certification verification (for staging certificates only)"`
-}
+var (
+	user     string
+	password string
+	server   string
+	insecure bool
+)
 
 const (
 	writeWait  = 10 * time.Second
@@ -46,43 +48,6 @@ func notifyUser(payload []byte) error {
 		return err
 	}
 	return notifyUserPlatform(&semN)
-}
-
-func title(semN *semrelay.Notification) (string, error) {
-	startT, err := time.Parse(time.RFC3339, semN.Pipeline.RunningAt)
-	if err != nil {
-		return "", err
-	}
-	doneT, err := time.Parse(time.RFC3339, semN.Pipeline.DoneAt)
-	if err != nil {
-		return "", err
-	}
-	mins := doneT.Sub(startT).Minutes()
-	return fmt.Sprintf("Build %s for %s:%s in %.0fm",
-		semN.Pipeline.Result, semN.Project.Name, semN.Revision.Branch.Name, mins), nil
-}
-
-func body(semN *semrelay.Notification) string {
-	b := strings.Builder{}
-	fmt.Fprintf(&b, "Commit %s: %s\n",
-		semN.Revision.CommitSHA[:7], semN.Revision.CommitMessage)
-	if semN.Pipeline.Result == "failed" {
-		blockParts := []string{}
-		for _, block := range semN.Blocks {
-			jobParts := []string{}
-			for _, job := range block.Jobs {
-				if job.Result == "failed" {
-					jobParts = append(jobParts, job.Name)
-				}
-			}
-			if len(jobParts) > 0 {
-				blockParts = append(blockParts,
-					fmt.Sprintf("%s (%s)", block.Name, strings.Join(jobParts, ", ")))
-			}
-		}
-		fmt.Fprintf(&b, "Failed in %s\n", strings.Join(blockParts, ", "))
-	}
-	return b.String()
 }
 
 func run() error {
@@ -106,6 +71,41 @@ func run() error {
 	}
 }
 
+func runConnection() error {
+	var err error
+	url := fmt.Sprintf("wss://%s/ws", server)
+	conn, _, err := websocket.DefaultDialer.DialContext(clientCtx, url, nil)
+	if err != nil {
+		log.Println("connect failed: ", err)
+		return nil
+	}
+	client := newClient(clientCtx, conn)
+	defer client.close()
+	curClient.Store(client)
+	if err := clientCtx.Err(); err != nil {
+		return err
+	}
+	if err := client.initPings(); err != nil {
+		fmt.Println("Failed to set up ping handling:", err)
+	}
+	fmt.Println("Connected.")
+
+	register(client)
+	log.Println("Registered.")
+
+	for {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("ReadMessage failed:", err)
+			return nil
+		}
+		if err := handleMessage(client, raw); err != nil {
+			log.Println("Error handling message:", err)
+			return nil
+		}
+	}
+}
+
 func sleep(d time.Duration) {
 	t := time.NewTimer(d)
 	// don't bother stopping the timer, if the context is cancelled we're about
@@ -122,26 +122,34 @@ func sleep(d time.Duration) {
 type Client struct {
 	conn   *websocket.Conn
 	sendCh chan *semrelay.Message
+	sendWG sync.WaitGroup
 }
 
-func newClient(conn *websocket.Conn) *Client {
+func newClient(parentCtx context.Context, conn *websocket.Conn) *Client {
 	client := &Client{
 		conn:   conn,
 		sendCh: make(chan *semrelay.Message),
 	}
+	// client.ctx, client.cancel = context.WithCancel(parentCtx)
+	client.sendWG.Add(1)
 	go client.runSend()
 	return client
 }
 
 func (c *Client) close() error {
-	close(c.sendCh)
+	log.Println("client close()")
+	if c.sendCh != nil {
+		close(c.sendCh)
+		c.sendCh = nil
+	}
+	c.sendWG.Wait()
 	return c.conn.Close()
 }
 
 func (c *Client) runSend() {
+	defer c.sendWG.Done()
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
-		c.conn.Close()
 		ticker.Stop()
 	}()
 	for {
@@ -151,12 +159,12 @@ func (c *Client) runSend() {
 				panic(err)
 			}
 			if !ok {
-				// The hub closed the channel.
+				// Connection is being closed
 				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 			if err := c.conn.WriteJSON(msg); err != nil {
-				log.Println("Failed to send message: ", err)
+				log.Println("Failed to send message:", err)
 				return
 			}
 		case <-ticker.C:
@@ -170,44 +178,6 @@ func (c *Client) runSend() {
 				log.Printf("Error sending ping: %v\n", err)
 				return
 			}
-		}
-	}
-}
-
-func runConnection() error {
-	var err error
-	conn, _, err := websocket.DefaultDialer.DialContext(clientCtx, fmt.Sprintf("wss://%s/ws", opts.Server), nil)
-	if err != nil {
-		log.Println("connect failed: ", err)
-		return nil
-	}
-	client := newClient(conn)
-	defer client.close()
-	curClient.Store(client)
-	if err := clientCtx.Err(); err != nil {
-		return err
-	}
-	fmt.Println("Connected.")
-	if err := client.initPings(); err != nil {
-		return err
-	}
-	go client.runSend()
-
-	if err := register(conn); err != nil {
-		log.Println("registration failed: ", err)
-		return nil
-	}
-	log.Println("Registered.")
-
-	for {
-		_, raw, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("ReadMessage failed: ", err)
-			return nil
-		}
-		if err := handleMessage(client, raw); err != nil {
-			log.Println("error handling message: ", err)
-			return nil
 		}
 	}
 }
@@ -226,9 +196,6 @@ func (c *Client) initPings() error {
 }
 
 func handleMessage(client *Client, raw []byte) error {
-	if len(raw) == 0 {
-		return errors.New("received empty message")
-	}
 	log.Printf("Received %d bytes: %s\n", len(raw), raw)
 	var msg semrelay.Message
 	if err := json.Unmarshal(raw, &msg); err != nil {
@@ -240,6 +207,7 @@ func handleMessage(client *Client, raw []byte) error {
 			return err
 		}
 		ack := semrelay.MakeAck(msg.Id)
+		log.Printf("Sending ack for message %d\n", msg.Id)
 		client.sendCh <- &ack
 	default:
 		return fmt.Errorf("Unhandled message type: %s", msg.Type)
@@ -247,25 +215,8 @@ func handleMessage(client *Client, raw []byte) error {
 	return nil
 }
 
-func register(conn *websocket.Conn) error {
-	w, err := conn.NextWriter(websocket.TextMessage)
-	if err != nil {
-		return err
-	}
-	msg, err := json.Marshal(&semrelay.Registration{
-		User:     opts.User,
-		Password: opts.Password,
-	})
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(msg)
-	if err != nil {
-		return err
-	}
-	// The authentication protocol is as simple as it gets. If authentication
-	// fails, the server will just drop the connection.
-	return w.Close()
+func register(client *Client) {
+	client.sendCh <- semrelay.MakeRegistration(user, password)
 }
 
 func sendExample(name string) error {
@@ -302,18 +253,58 @@ func closer() {
 	_ = client.(*Client).close()
 }
 
-func main() {
-	parser := flags.NewParser(&opts, flags.Default)
-	args, err := parser.Parse()
+func parseConfig() error {
+	cfg, err := xdg.SearchConfigFile("semnotify/config")
 	if err != nil {
-		if !flags.WroteHelp(err) {
-			parser.WriteHelp(os.Stderr)
-		}
+		// config file not found
+		return nil
+	}
+	viper.SetConfigType("env")
+	viper.SetConfigFile(cfg)
+	return viper.ReadInConfig()
+}
+
+func processConfig() error {
+	log.Println("config", viper.AllSettings())
+	user = viper.GetString("user")
+	password = viper.GetString("password")
+	server = viper.GetString("server")
+	insecure = viper.GetBool("insecure")
+
+	if user == "" {
+		return errors.New("must specify user in configuration")
+	}
+	if password == "" {
+		return errors.New("must specify password in configuration")
+	}
+	if server == "" {
+		return errors.New("must specify server in configuration")
+	}
+	return nil
+}
+
+func main() {
+	pflag.StringP("user", "u", "", "GitHub user to receive notifications for")
+	pflag.StringP("password", "p", "", "semrelay password")
+	pflag.StringP("server", "s", "", "semrelay hostname")
+	pflag.Bool("insecure", false, "Disable TLS certificate verification")
+	pflag.Parse()
+	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
+		panic(err)
+	}
+	if err := parseConfig(); err != nil {
+		log.Println("Error parsing configuration:", err)
 		os.Exit(1)
 	}
+	if err := processConfig(); err != nil {
+		log.Println("Configuration error:", err)
+		os.Exit(1)
+	}
+
 	clientCtx, _ = signal.NotifyContext(context.Background(),
 		os.Interrupt, os.Kill, unix.SIGTERM, unix.SIGHUP)
 	go closer()
+	args := pflag.Args()
 	if len(args) > 0 {
 		if err := sendExample(args[0]); err != nil {
 			log.Fatal("Sending example failed: ", err)
@@ -321,10 +312,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	if opts.User == "" || opts.Password == "" || opts.Server == "" {
-		log.Fatal("must specify --user, --password, and --server")
-	}
-	if opts.Insecure {
+	if insecure {
 		websocket.DefaultDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	if err := run(); err != nil {
