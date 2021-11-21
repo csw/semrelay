@@ -72,6 +72,7 @@ func notifyUser(semN *semrelay.Notification) error {
 			"x-dunst-stack-tag": dbus.MakeVariant(tag),
 			"image-data":        dbus.MakeVariant(icon),
 		},
+		ExpireTimeout: ttl,
 	}
 	id, err := notifier.SendNotification(n)
 	if err != nil {

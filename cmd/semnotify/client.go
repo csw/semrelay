@@ -30,6 +30,7 @@ var (
 	server     string
 	insecure   bool
 	promotions bool
+	ttl        time.Duration
 )
 
 const (
@@ -257,6 +258,7 @@ func closer() {
 }
 
 func parseConfig() error {
+	viper.SetDefault("ttl", 0) // do not expire
 	cfg, err := xdg.SearchConfigFile("semnotify/config")
 	if err != nil {
 		// config file not found
@@ -273,6 +275,7 @@ func processConfig() error {
 	server = viper.GetString("server")
 	insecure = viper.GetBool("insecure")
 	promotions = viper.GetBool("promotions")
+	ttl = viper.GetDuration("ttl")
 
 	if user == "" {
 		return errors.New("must specify user in configuration")
@@ -302,6 +305,7 @@ func main() {
 	pflag.StringP("password", "p", "", "semrelay password")
 	pflag.StringP("server", "s", "", "semrelay hostname")
 	pflag.BoolP("verbose", "v", false, "Verbose mode")
+	pflag.Duration("ttl", 0, "Notification time-to-live")
 	pflag.Bool("insecure", false, "Disable TLS certificate verification")
 	pflag.Bool("promotions", true, "Show promotion results")
 	pflag.Parse()
