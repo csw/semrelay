@@ -70,6 +70,7 @@ It reads its configuration from `$XDG_CONFIG_HOME/semnotify/config` (typically `
 - `server`: server hostname.
 - `insecure`: skip TLS certificate verification (for testing only)
 - `promotions`: whether to show notifications for promotions or only build pipelines.
+- `ttl`: time until notifications expire, e.g. `30s`. 0 (never expire) by default.
 
 To use it with [sway][] or [i3][], you can add `exec_always semnotify` to your configuration.
 
