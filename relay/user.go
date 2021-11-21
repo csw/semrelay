@@ -10,7 +10,7 @@ import (
 )
 
 type User struct {
-	name     string
+	Name     string
 	msgCh    chan *NotificationTask
 	ackCh    chan uint64
 	joinCh   chan Client
@@ -26,7 +26,7 @@ const (
 
 func NewUser(name string) *User {
 	return &User{
-		name:    name,
+		Name:    name,
 		msgCh:   make(chan *NotificationTask, queueMax),
 		ackCh:   make(chan uint64, 1),
 		joinCh:  make(chan Client, 1),
@@ -41,7 +41,7 @@ func (u *User) Dispatch(payload json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	u.msgCh <- NewNotificationTask(id, u.name, enc)
+	u.msgCh <- NewNotificationTask(id, u.Name, enc)
 	return nil
 }
 
@@ -127,7 +127,7 @@ func (u *User) register(client Client) {
 		u.queue = u.queue[:0]
 	}
 	u.clients = append(u.clients, client)
-	log.WithField("client", client).WithField("user", u.name).Info("Registered")
+	log.WithField("client", client).WithField("user", u.Name).Info("Registered")
 }
 
 func (u *User) deregister(client Client) {
@@ -139,7 +139,7 @@ func (u *User) deregister(client Client) {
 	}
 	u.clients = nClients
 	client.Disconnect()
-	log.WithField("client", client).WithField("user", u.name).Info("Deregistered")
+	log.WithField("client", client).WithField("user", u.Name).Debug("Deregistered")
 }
 
 func appendBounded(q []*NotificationTask, nt *NotificationTask) []*NotificationTask {

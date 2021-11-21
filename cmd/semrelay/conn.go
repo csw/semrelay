@@ -53,19 +53,28 @@ func (c *Client) String() string {
 	return c.conn.RemoteAddr().String()
 }
 
+func (c *Client) log() *log.Entry {
+	return log.WithFields(log.Fields{
+		"user": c.user.Name,
+		"conn": c.String(),
+	})
+}
+
 func (c *Client) TrySend(msg *relay.NotificationTask) bool {
 	select {
 	case c.send <- msg.Payload:
 		// sent
+		c.log().Info("Sent notification")
 		return true
 	default:
 		// queue is full, drop the connection
+		c.log().Error("Queue full, failed to send")
 		return false
 	}
 }
 
 func (c *Client) Disconnect() {
-	log.WithField("conn", c.String()).Info("Disconnecting client")
+	log.WithField("conn", c.String()).Debug("Disconnecting client")
 	close(c.send)
 }
 

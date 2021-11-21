@@ -31,7 +31,7 @@ var clickCh = make(chan uint32, 8)
 
 var icon *DBusIcon
 
-func notifyUserDBus(semN *semrelay.Notification) error {
+func notifyUser(semN *semrelay.Notification) error {
 	if !promotions && semN.Pipeline.Id != semN.Workflow.InitialPipelineId {
 		// Only display results for the original pipeline. This avoids
 		// displaying notifications for automatic promotions that might validly
@@ -39,6 +39,12 @@ func notifyUserDBus(semN *semrelay.Notification) error {
 		log.Debugf("Ignoring result for pipeline %s", semN.Pipeline.YamlFileName)
 		return nil
 	}
+	log.WithFields(log.Fields{
+		"user":       user,
+		"repository": semN.Repository.Slug,
+		"done_at":    semN.Pipeline.DoneAt,
+		"pipeline":   semN.Pipeline.Id,
+	}).Info("Showing notification")
 	urgency := dbus.MakeVariant(1) // Normal
 	if semN.Pipeline.Result == "failed" {
 		urgency = dbus.MakeVariant(byte(2)) // Critical

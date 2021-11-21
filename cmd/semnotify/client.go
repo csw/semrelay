@@ -43,14 +43,6 @@ var (
 	clientCtx context.Context
 )
 
-func notifyUser(payload []byte) error {
-	var semN semrelay.Notification
-	if err := json.Unmarshal(payload, &semN); err != nil {
-		return err
-	}
-	return notifyUserDBus(&semN)
-}
-
 func run() error {
 	if err := initDBus(); err != nil {
 		return err
@@ -206,7 +198,11 @@ func handleMessage(client *Client, raw []byte) error {
 	}
 	switch msg.Type {
 	case semrelay.NotificationMsg:
-		if err := notifyUser(msg.Payload); err != nil {
+		var semN semrelay.Notification
+		if err := json.Unmarshal(msg.Payload, &semN); err != nil {
+			return err
+		}
+		if err := notifyUser(&semN); err != nil {
 			return err
 		}
 		ack := semrelay.MakeAck(msg.Id)
@@ -235,7 +231,11 @@ func sendExample(name string) error {
 	if err := initDBus(); err != nil {
 		return fmt.Errorf("DBus connection error: %s", err)
 	}
-	err := notifyUser(msg)
+	var semN semrelay.Notification
+	if err := json.Unmarshal(msg, &semN); err != nil {
+		panic(err)
+	}
+	err := notifyUser(&semN)
 	if err == nil {
 		time.Sleep(5 * time.Second)
 	}

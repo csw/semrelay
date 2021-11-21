@@ -42,6 +42,12 @@ func handleHook(d *relay.Dispatcher, w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "nope")
 		return
 	}
+	log.WithFields(log.Fields{
+		"user":       user,
+		"repository": n.Repository.Slug,
+		"done_at":    n.Pipeline.DoneAt,
+		"pipeline":   n.Pipeline.Id,
+	}).Info("Received build notification")
 	d.Dispatch(user, body)
 	fmt.Fprintln(w, "Roger")
 }
