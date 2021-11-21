@@ -29,12 +29,11 @@ var clickCh = make(chan uint32, 8)
 var icon *DBusIcon
 
 func notifyUserPlatform(semN *semrelay.Notification) error {
-	if semN.Pipeline.Id != semN.Workflow.InitialPipelineId {
+	if !promotions && semN.Pipeline.Id != semN.Workflow.InitialPipelineId {
 		// Only display results for the original pipeline. This avoids
 		// displaying notifications for automatic promotions that might validly
-		// fail. This should probably be changed, but I'll have to revisit one
-		// of my CI configurations.
-		log.Printf("Ignoring result for pipeline %s", semN.Pipeline.YamlFileName)
+		// fail.
+		log.Debugf("Ignoring result for pipeline %s", semN.Pipeline.YamlFileName)
 		return nil
 	}
 	urgency := dbus.MakeVariant(1) // Normal

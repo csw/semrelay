@@ -25,10 +25,11 @@ import (
 )
 
 var (
-	user     string
-	password string
-	server   string
-	insecure bool
+	user       string
+	password   string
+	server     string
+	insecure   bool
+	promotions bool
 )
 
 const (
@@ -271,6 +272,7 @@ func processConfig() error {
 	password = viper.GetString("password")
 	server = viper.GetString("server")
 	insecure = viper.GetBool("insecure")
+	promotions = viper.GetBool("promotions")
 
 	if user == "" {
 		return errors.New("must specify user in configuration")
@@ -301,6 +303,7 @@ func main() {
 	pflag.StringP("server", "s", "", "semrelay hostname")
 	pflag.BoolP("verbose", "v", false, "Verbose mode")
 	pflag.Bool("insecure", false, "Disable TLS certificate verification")
+	pflag.Bool("promotions", true, "Show promotion results")
 	pflag.Parse()
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
 		panic(err)
