@@ -84,7 +84,10 @@ func runConnection() error {
 	}
 	log.Infof("Connected to %s.", server)
 
-	register(client)
+	if err := register(client); err != nil {
+		log.WithError(err).Error("Registration failed")
+		return nil
+	}
 	log.Debug("Registered.")
 
 	for {
@@ -215,8 +218,16 @@ func handleMessage(client *Client, raw []byte) error {
 	return nil
 }
 
-func register(client *Client) {
+func register(client *Client) error {
 	client.sendCh <- semrelay.MakeRegistration(user, password)
+	var msg semrelay.Message
+	if err := client.conn.ReadJSON(&msg); err != nil {
+		return err
+	}
+	if msg.Type != semrelay.HelloMsg {
+		return fmt.Errorf("Expected hello message, got %s", msg.Type)
+	}
+	return nil
 }
 
 func sendExample(name string) error {
