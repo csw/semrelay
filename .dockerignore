@@ -8,3 +8,5 @@ docker-compose*.yml
 /*.md
 .gitignore
 .dockerignore
+/.github
+/*.xml

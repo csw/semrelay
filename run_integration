@@ -6,8 +6,8 @@ $compose build semrelay_test
 $compose up -d semrelay_test
 sleep 2
 export TARGET_PORT=9021
-go test -tags integration -count 1 ./internal/integration
+gotestsum --junitfile integration.xml -f testname -- -tags integration -count 1 ./internal/integration
 rc=$?
 
 $compose stop -t 5 semrelay_test
-
+exit $rc
