@@ -52,7 +52,16 @@ func main() {
 			}
 		}()
 	}
-	err := certmagic.HTTPS([]string{domain}, mux)
+	var err error
+	if os.Getenv("HTTP_ONLY") != "" {
+		port := "80"
+		if portspec := os.Getenv("PORT"); portspec != "" {
+			port = portspec
+		}
+		err = http.ListenAndServe(":"+port, mux)
+	} else {
+		err = certmagic.HTTPS([]string{domain}, mux)
+	}
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

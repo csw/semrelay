@@ -74,6 +74,12 @@ It reads its configuration from `$XDG_CONFIG_HOME/semnotify/config` (typically `
 
 To use it with [sway][] or [i3][], you can add `exec_always semnotify` to your configuration.
 
+## Development
+
+This is built with Go 1.17.
+
+There is a simple integration test suite, runnable with `./run_integration`.
+
 [semaphore]: https://semaphoreci.com/
 [sem-webhook]: https://docs.semaphoreci.com/essentials/webhook-notifications/
 [websockets]: https://en.wikipedia.org/wiki/WebSocket

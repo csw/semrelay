@@ -1,18 +1,17 @@
 version: "2.4"
 services:
-  semrelay:
-    image: cswheeler/semrelay:latest
+  semrelay_test:
     build:
       context: .
       dockerfile: docker/Dockerfile.server
     network_mode: "host"
     cap_add:
       - NET_BIND_SERVICE
-    restart: "always"
+    restart: "no"
     environment:
-      - DOMAIN
-      - EMAIL
-      - PASSWORD
-      - TOKEN
-      - VERBOSE
-      - TEST
+      - DOMAIN=example.com
+      - HTTP_ONLY=1
+      - PASSWORD=password
+      - TOKEN=token
+      - VERBOSE=1
+      - PORT=9021

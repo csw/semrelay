@@ -1,6 +1,10 @@
 /semnotify
 /semrelay
 *.vscode
-docker-compose.yml
+docker-compose*.yml
 /docker
+/run_integration
 *_screenshot.png
+/*.md
+.gitignore
+.dockerignore

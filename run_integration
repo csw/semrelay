@@ -1,0 +1,13 @@
+#!/bin/bash
+
+compose="docker-compose -f docker-compose.integration.yml"
+
+$compose build semrelay_test
+$compose up -d semrelay_test
+sleep 2
+export TARGET_PORT=9021
+go test -tags integration -count 1 ./internal/integration
+rc=$?
+
+$compose stop -t 5 semrelay_test
+
