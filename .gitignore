@@ -2,3 +2,4 @@
 /semrelay
 *.vscode
 /docker-compose.override.yml
+/integration.xml
