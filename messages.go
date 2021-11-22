@@ -6,6 +6,7 @@ const (
 	RegistrationMsg = "registration"
 	NotificationMsg = "notification"
 	AckMsg          = "ack"
+	HelloMsg        = "hello"
 )
 
 type Message struct {
@@ -23,6 +24,10 @@ func MakeRegistration(user, password string) *Message {
 		Type:    RegistrationMsg,
 		Payload: reg,
 	}
+}
+
+func MakeHello() Message {
+	return Message{Type: HelloMsg}
 }
 
 func MakeNotification(id uint64, payload json.RawMessage) *Message {

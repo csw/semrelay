@@ -107,6 +107,7 @@ func (u *User) onAck(id uint64) {
 }
 
 func (u *User) register(client Client) {
+	client.Hello()
 	if len(u.clients) == 0 {
 		// send pending messages
 		for _, msg := range u.inFlight {

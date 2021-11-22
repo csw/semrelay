@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -60,6 +61,14 @@ func (c *Client) log() *log.Entry {
 	})
 }
 
+func (c *Client) Hello() {
+	enc, err := json.Marshal(semrelay.MakeHello())
+	if err != nil {
+		panic(err)
+	}
+	c.send <- enc
+}
+
 func (c *Client) TrySend(msg *relay.NotificationTask) bool {
 	select {
 	case c.send <- msg.Payload:
@@ -102,7 +111,7 @@ func (c *Client) readPump() {
 	for {
 		var msg semrelay.Message
 		if err := c.conn.ReadJSON(&msg); err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err) || errors.Is(err, syscall.ECONNRESET) {
 				ulog.Info("Connection closed")
 				break
 			}

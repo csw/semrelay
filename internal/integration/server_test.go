@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration
 
@@ -75,7 +74,11 @@ func wsConn(t *testing.T, user, password string) *websocket.Conn {
 	require.NoError(t, err)
 	reg := semrelay.MakeRegistration(user, password)
 	err = conn.WriteJSON(&reg)
+	var hello semrelay.Message
 	require.NoError(t, err)
+	err = conn.ReadJSON(&hello)
+	require.NoError(t, err)
+	require.Equal(t, semrelay.HelloMsg, hello.Type)
 	return conn
 }
 
