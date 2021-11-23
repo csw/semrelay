@@ -322,9 +322,6 @@ func main() {
 		log.WithError(err).Fatal("Configuration error.")
 	}
 
-	clientCtx, _ = signal.NotifyContext(context.Background(),
-		os.Interrupt, os.Kill, unix.SIGTERM, unix.SIGHUP)
-	go closer()
 	args := pflag.Args()
 	if len(args) > 0 {
 		if err := sendExample(args[0]); err != nil {
@@ -332,6 +329,10 @@ func main() {
 		}
 		os.Exit(0)
 	}
+
+	clientCtx, _ = signal.NotifyContext(context.Background(),
+		os.Interrupt, os.Kill, unix.SIGTERM, unix.SIGHUP)
+	go closer()
 
 	if insecure {
 		websocket.DefaultDialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
