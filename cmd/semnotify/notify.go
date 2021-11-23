@@ -132,7 +132,7 @@ func initDBus() error {
 	if reply == dbus.RequestNameReplyExists {
 		return errors.New("semnotify already running and registered with DBus")
 	} else if reply != dbus.RequestNameReplyPrimaryOwner {
-		return fmt.Errorf("Failed to acquire DBus name: RequestNameReply %d", reply)
+		return fmt.Errorf("failed to acquire DBus name: RequestNameReply %d", reply)
 	}
 
 	notifier, err = notify.New(dConn, notify.WithOnAction(onAction))
