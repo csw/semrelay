@@ -34,9 +34,9 @@ var (
 )
 
 const (
-	writeWait  = 10 * time.Second
-	pongWait   = 60 * time.Second
-	pingPeriod = (pongWait * 9) / 10
+	writeWait    = 10 * time.Second
+	registerWait = 15 * time.Second
+	pingWait     = 60 * time.Second
 )
 
 var (
@@ -50,7 +50,7 @@ func run() error {
 	}
 	defer func() {
 		if err := cleanupDBus(); err != nil {
-			log.WithError(err).Error("Cleanup failed")
+			log.WithError(err).Error("Cleanup failed.")
 		}
 	}()
 	for {
@@ -70,7 +70,7 @@ func runConnection() error {
 	url := fmt.Sprintf("wss://%s/ws", server)
 	conn, _, err := websocket.DefaultDialer.DialContext(clientCtx, url, nil)
 	if err != nil {
-		log.WithError(err).Debug("Connection failed")
+		log.WithError(err).Debug("Connection failed.")
 		return nil
 	}
 	client := newClient(clientCtx, conn)
@@ -80,28 +80,39 @@ func runConnection() error {
 		return err
 	}
 	if err := client.initPings(); err != nil {
-		log.WithError(err).Error("Failed to set up ping handling")
+		log.WithError(err).Error("Failed to set up ping handling.")
 	}
 	log.Infof("Connected to %s.", server)
 
 	if err := register(client); err != nil {
-		log.WithError(err).Error("Registration failed")
+		log.WithError(err).Error("Registration failed.")
 		return nil
 	}
 	log.Debug("Registered.")
 
 	for {
+		if err := conn.SetReadDeadline(time.Now().Add(pingWait)); err != nil {
+			panic(err)
+		}
 		_, raw, err := conn.ReadMessage()
 		if err != nil {
+			if clientCtx.Err() != nil {
+				// canceled, exit gracefully and quietly
+				return nil
+			}
+			var netErr net.Error
 			if websocket.IsUnexpectedCloseError(err) {
 				log.Warn("Connection closed.")
 				return nil
+			} else if errors.As(err, &netErr) && netErr.Timeout() {
+				log.Warn("Communication with server timed out.")
+				return nil
 			}
-			log.WithError(err).Error("ReadMessage failed")
+			log.WithError(err).Error("ReadMessage failed.")
 			return nil
 		}
 		if err := handleMessage(client, raw); err != nil {
-			log.WithError(err).Error("Error handling message")
+			log.WithError(err).Error("Error handling message.")
 			return nil
 		}
 	}
@@ -147,49 +158,27 @@ func (c *Client) close() error {
 
 func (c *Client) runSend() {
 	defer c.sendWG.Done()
-	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-	}()
-	for {
-		select {
-		case msg, ok := <-c.sendCh:
-			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-				panic(err)
-			}
-			if !ok {
-				// Connection is being closed
-				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-			if err := c.conn.WriteJSON(msg); err != nil {
-				log.WithError(err).Error("Error sending message")
-				return
-			}
-		case <-ticker.C:
-			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-				panic(err)
-			}
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				if errors.Is(err, net.ErrClosed) {
-					return
-				}
-				log.WithError(err).Error("Error sending ping")
-				return
-			}
+	for msg := range c.sendCh {
+		if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+			panic(err)
+		}
+		if err := c.conn.WriteJSON(msg); err != nil {
+			log.WithError(err).Error("Error sending message.")
+			return
 		}
 	}
+	// Connection is being closed
+	_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 }
 
 func (c *Client) initPings() error {
-	if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-		return err
-	}
-	c.conn.SetPongHandler(func(string) error {
-		if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+	// The server sends periodic pings. Instead of pinging the server ourselves,
+	// we wait for its pings to arrive and reset the read deadline when they do.
+	c.conn.SetPingHandler(func(string) error {
+		if err := c.conn.SetReadDeadline(time.Now().Add(pingWait)); err != nil {
 			return err
 		}
-		return nil
+		return c.conn.WriteControl(websocket.PongMessage, nil, time.Now().Add(writeWait))
 	})
 	return nil
 }
@@ -210,7 +199,7 @@ func handleMessage(client *Client, raw []byte) error {
 			return err
 		}
 		ack := semrelay.MakeAck(msg.Id)
-		log.Debugf("Sending ack for message %d", msg.Id)
+		log.Debugf("Sending ack for message %d.", msg.Id)
 		client.sendCh <- &ack
 	default:
 		return fmt.Errorf("Unhandled message type: %s", msg.Type)
@@ -221,6 +210,9 @@ func handleMessage(client *Client, raw []byte) error {
 func register(client *Client) error {
 	client.sendCh <- semrelay.MakeRegistration(user, password)
 	var msg semrelay.Message
+	if err := client.conn.SetReadDeadline(time.Now().Add(registerWait)); err != nil {
+		return err
+	}
 	if err := client.conn.ReadJSON(&msg); err != nil {
 		return err
 	}
@@ -324,10 +316,10 @@ func main() {
 		panic(err)
 	}
 	if err := parseConfig(); err != nil {
-		log.WithError(err).Fatal("Error parsing configuration")
+		log.WithError(err).Fatal("Error parsing configuration.")
 	}
 	if err := processConfig(); err != nil {
-		log.WithError(err).Fatal("Configuration error")
+		log.WithError(err).Fatal("Configuration error.")
 	}
 
 	clientCtx, _ = signal.NotifyContext(context.Background(),
@@ -336,7 +328,7 @@ func main() {
 	args := pflag.Args()
 	if len(args) > 0 {
 		if err := sendExample(args[0]); err != nil {
-			log.WithError(err).Fatal("Sending example failed")
+			log.WithError(err).Fatal("Sending example failed.")
 		}
 		os.Exit(0)
 	}
@@ -346,7 +338,7 @@ func main() {
 	}
 	if err := run(); err != nil {
 		if err != context.Canceled {
-			log.WithError(err).Fatal("Exiting with error")
+			log.WithError(err).Fatal("Exiting with error.")
 		}
 	}
 }

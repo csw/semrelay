@@ -36,7 +36,7 @@ func notifyUser(semN *semrelay.Notification) error {
 		// Only display results for the original pipeline. This avoids
 		// displaying notifications for automatic promotions that might validly
 		// fail.
-		log.Debugf("Ignoring result for pipeline %s", semN.Pipeline.YamlFileName)
+		log.Debugf("Ignoring result for pipeline %s.", semN.Pipeline.YamlFileName)
 		return nil
 	}
 	log.WithFields(log.Fields{
@@ -98,11 +98,11 @@ func runHandler() {
 				continue
 			}
 			delete(registry, id)
-			log.WithField("url", url).Debug("Opening URL on click")
+			log.WithField("url", url).Debug("Opening URL on click.")
 			cmd := exec.Command("xdg-open", url)
 			err := cmd.Run()
 			if err != nil {
-				log.WithField("url", url).WithError(err).Error("Error opening URL")
+				log.WithField("url", url).WithError(err).Error("Error opening URL.")
 			}
 		}
 	}
@@ -163,10 +163,10 @@ func initDBus() error {
 
 func cleanupDBus() error {
 	if err := notifier.Close(); err != nil {
-		log.WithError(err).Error("Error closing notifier")
+		log.WithError(err).Error("Error closing notifier.")
 	}
 	if err := dConn.Close(); err != nil {
-		log.WithError(err).Error("Error closing DBus connection")
+		log.WithError(err).Error("Error closing DBus connection.")
 		return err
 	}
 	return nil
