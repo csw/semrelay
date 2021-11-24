@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"syscall"
 	"time"
@@ -111,11 +112,15 @@ func (c *Client) readPump() {
 	for {
 		var msg semrelay.Message
 		if err := c.conn.ReadJSON(&msg); err != nil {
+			var netErr net.Error
 			if websocket.IsUnexpectedCloseError(err) || errors.Is(err, syscall.ECONNRESET) {
-				ulog.Info("Connection closed")
-				break
+				ulog.WithError(err).Error("Connection closed")
+			} else if errors.As(err, &netErr) && netErr.Timeout() {
+				ulog.WithError(err).Error("Read timeout")
+			} else {
+				ulog.WithError(err).Error("Error reading message")
 			}
-			log.WithError(err).Error("Error reading message")
+			break
 		}
 		switch msg.Type {
 		case semrelay.AckMsg:
